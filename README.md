@@ -18,9 +18,8 @@
 5. [Technical Highlights](#technical-highlights)
 6. [Performance](#performance)
 7. [Architecture](#architecture)
-8. [What I Learned](#what-i-learned)
-9. [Roadmap](#roadmap)
-10. [References](#references)
+8. [Roadmap](#roadmap)
+9. [References](#references)
 
 ---
 
@@ -57,14 +56,14 @@ finished CPU-rendered frame; it does no rendering itself.
 ## Gallery
 
 <p align="center">
-  <img src="./resources/Cornell%20Box%20Stage%206%20-%20Apply%20clean%20metal%20material%20to%20the%20back%20sphere%20%28spp%20128%29.jpg" alt="Metal sphere mirroring the room" width="420"/>
-  <img src="./resources/Cornell%20Box%20Stage%207%20-%20Apply%20glass%20metal%20material%20to%20the%20front%20sphere%20%28spp%20128%29.jpg" alt="Glass and metal spheres in the Cornell Box" width="420"/><br>
+  <img src="./resources/Cornell%20Box%20Stage%206%20-%20Apply%20clean%20metal%20material%20to%20the%20back%20sphere%20%28spp%20128%29.jpg" alt="Metal sphere mirroring the room" width="390"/>
+  <img src="./resources/Cornell%20Box%20Stage%207%20-%20Apply%20glass%20metal%20material%20to%20the%20front%20sphere%20%28spp%20128%29.jpg" alt="Glass and metal spheres in the Cornell Box" width="390"/><br>
   <sub><i>Left: the metal sphere mirrors the room. Right: the glass sphere added — note the red/green <b>color bleeding</b> on the floor from indirect light.</i></sub>
 </p>
 
 <p align="center">
-  <img src="./resources/Debug-Normal.jpg" alt="Surface-normals debug view" width="420"/>
-  <img src="./resources/Draw%20one%20rectangle.jpg" alt="Early rectangle-intersection test" width="420"/><br>
+  <img src="./resources/Debug-Normal.jpg" alt="Surface-normals debug view" width="390"/>
+  <img src="./resources/Draw%20one%20rectangle.jpg" alt="Early rectangle-intersection test" width="390"/><br>
   <sub><i>Building with verification: the <b>normals</b> debug view (left) confirms geometry orientation before any lighting; an early rectangle-intersection test (right).</i></sub>
 </p>
 
@@ -104,16 +103,16 @@ unbranching recursive path:
 // One random, unbranching light path (backward, from the camera).
 math::vec3 tracePath(Ray ray, int depth, RNG& rng)
 {
-    if (depth <= 0)          return math::vec3(0.0f);   // out of bounces
-    Hit hit = FindClosestCollision(ray);
-    if (hit.d < 0.0f)        return math::vec3(0.0f);   // escaped the scene
+    if (depth <= 0)          return math::vec3(0.0f);   
+    Hit hit = FindNearestCollision(ray);
+    if (hit.d < 0.0f)        return math::vec3(0.0f);   
 
     math::vec3 emitted = hit.obj->material->Emitted();
 
     Ray scattered;  math::vec3 attenuation;
     if (hit.obj->material->Scatter(ray, hit, rng, attenuation, scattered))
         return emitted + attenuation * tracePath(scattered, depth - 1, rng);
-    return emitted;                                     // absorbed (e.g. a light)
+    return emitted;                                     
 }
 ```
 
@@ -177,12 +176,31 @@ contributes to a pixel**, whereas photons fired from the light would almost neve
 
 ## Performance
 
-> **[Phase 2 — in progress]** The renderer is currently single-threaded (~[FILL] s per frame at
-> 128 spp). Next: a hand-built **tile-based thread pool** to parallelize across cores.
+> **[Phase 2 — in progress]** The renderer is currently **single-threaded** — ~19 s per frame at
+> 128 spp (600×600). Next: a hand-built **tile-based thread pool** to parallelize across cores.
 
+### Single-threaded baseline — render time vs. samples-per-pixel
+Measured with a `steady_clock` harness (600×600, max depth 8, one thread):
+
+| spp | Render time |
+|---:|---:|
+| 1 | 0.52 s |
+| 2 | 0.65 s |
+| 4 | 0.93 s |
+| 8 | 1.48 s |
+| 16 | 2.57 s |
+| 32 | 4.90 s |
+| 64 | 9.44 s |
+| 128 | 19.09 s |
+
+Render time scales **roughly linearly** with samples at higher counts (64 → 128 spp ≈ 2×), with
+fixed per-pixel overhead dominating at very low sample counts. This **19 s @ 128 spp** is the
+baseline the thread pool below has to beat.
+
+### Multithreaded speedup *(Phase 2 — coming)*
 | Threads | Render time | Speedup | Efficiency |
-|---|---|---|---|
-| 1 | [FILL] s | 1.0× | — |
+|---:|---:|---:|---:|
+| 1 | 19.09 s | 1.0× | — |
 | 2 | [FILL] s | [FILL]× | [FILL]% |
 | 4 | [FILL] s | [FILL]× | [FILL]% |
 | 8 | [FILL] s | [FILL]× | [FILL]% |
@@ -207,37 +225,6 @@ the pixel-write path**.
 
 ---
 
-## Build & Run
-
-- **Platform:** Windows, Visual Studio [FILL], C++20.
-- **Dependencies:** managed by **vcpkg (manifest mode)** — `glm`, `imgui`, `stb`. They restore
-  automatically on build from `vcpkg.json`.
-- **Steps:** [FILL: open the solution, select x64, build & run.]
-- **Controls:** the **Debug** panel (ImGui) switches views — Path Traced / Normals / Depth / Albedo.
-
----
-
-## What I Learned
-
-This project was as much about *understanding* as building. A few things that clicked:
-
-- **You're not storing colors, you're storing light.** The framebuffer is float HDR because light is
-  unbounded; the 0–255 range is only the display's final encoding, applied last via tone-map + gamma.
-- **Monte Carlo has a cost curve.** Noise ∝ 1/√N is *why* path tracing is expensive and why
-  multithreading (and later, importance-sampling tricks) matter.
-- **Some effects are structurally hard.** Caustics (light bent through glass onto a surface) are noisy
-  in a backward path tracer and can't be fixed by aiming rays at the light — because the light doesn't
-  arrive in a straight line.
-
-### Hardest bugs
-| Bug | Symptom | Root cause |
-|---|---|---|
-| Chained comparison `a <= x <= b` | A rectangle filled the entire screen | C++ evaluates it as `(a<=x) <= b` → compares a *bool* |
-| Glass rendered as a perfect mirror | No refraction at all | A double-negated normal clamped `cosθ` to 0 → Fresnel reflectance forced to 1.0 → always reflect |
-| Black hole in the scene center | Back wall + far sphere invisible | A magic `1000` "infinity" was smaller than the scene (which reaches ~1355 units) |
-
----
-
 ## Roadmap
 - **Multithreading** — tile-based thread pool + benchmark (in progress)
 - **Next-event estimation** — sample the light directly for much less noise
@@ -248,5 +235,4 @@ This project was as much about *understanding* as building. A few things that cl
 
 ## References
 - *Ray Tracing in One Weekend* — Peter Shirley
-- *Physically Based Rendering: From Theory to Implementation* — Pharr, Jakob, Humphreys
 - The Cornell Box — Cornell University Program of Computer Graphics
