@@ -1,11 +1,11 @@
-# 🐦 Blue-Footed Booby — Monte Carlo Path Tracer (C++)
+# 🐦 Blue-Footed Booby - Monte Carlo Path Tracer (C++)
 
-> A physically-based renderer built **from scratch** in C++ — no rendering libraries — that
+> A physically-based renderer built **from scratch** in C++ - no rendering libraries - that
 > simulates real light transport (global illumination, soft shadows, glass, metal).
 
 <p align="center">
   <img src="./resources/hero.jpg" alt="Cornell Box path-traced render with glass and metal spheres" width="640"/><br>
-  <sub><i>Cornell Box — path-traced with global illumination, a glass sphere, and a metal sphere.</i></sub>
+  <sub><i>Cornell Box - path-traced with global illumination, a glass sphere, and a metal sphere.</i></sub>
 </p>
 
 ---
@@ -25,9 +25,9 @@
 
 ## Motivation
 
-My eyes render the world automatically — the way a light source delicately interacts with every
+My eyes render the world automatically - the way a light source delicately interacts with every
 material around it, moment to moment. I kept coming back to one question: **how would I draw *that*
-on a screen?** Not "how do I use a game engine," but *why* does light look the way it does, and how
+on a screen?** Not "how do I use a game engine?" but *why* does light look the way it does, and how
 do you reproduce it from first principles?
 
 I built this to answer that question for myself.
@@ -36,18 +36,18 @@ I built this to answer that question for myself.
 
 ## Overview
 
-**What it is:** a from-scratch **Monte Carlo path tracer** in modern C++ that renders the classic
+**What it is:** a **Monte Carlo path tracer** built from scratch in modern C++ that renders the classic
 Cornell Box with physically-based light transport.
 
-**"From scratch" means:** all ray/light-transport code is mine. The only dependencies are
-**GLM** (vector math), **Dear ImGui** (debug UI), and **DirectX 11** — which only *displays* the
-finished CPU-rendered frame; it does no rendering itself.
+**"From scratch" means:** all ray/light-transport code is mine. The dependencies are
+**GLM** (vector math), **Dear ImGui** (debug UI), and **DirectX 11** - which only *displays* the
+finished CPU-rendered frame; it does no rendering itself, though a GPU renderer is on the roadmap.
 
 **Highlights**
 - Monte Carlo integration of the rendering equation (diffuse global illumination)
-- Emissive **area lights** → soft shadows and color bleeding
-- **Dielectric (glass)** — Fresnel reflectance, refraction, total internal reflection
-- **Metal** — mirror reflection with adjustable roughness
+- Emissive **area lights** - soft shadows and color bleeding
+- **Dielectric (glass)** - Fresnel reflectance, refraction, total internal reflection
+- **Metal** - mirror reflection with adjustable roughness
 - **Cosine-weighted importance sampling**, tone-mapping + gamma
 - Real-time **DirectX 11** viewport with live debug views (normals / depth / albedo)
 
@@ -58,7 +58,7 @@ finished CPU-rendered frame; it does no rendering itself.
 <p align="center">
   <img src="./resources/Cornell%20Box%20Stage%206%20-%20Apply%20clean%20metal%20material%20to%20the%20back%20sphere%20%28spp%20128%29.jpg" alt="Metal sphere mirroring the room" width="390"/>
   <img src="./resources/Cornell%20Box%20Stage%207%20-%20Apply%20glass%20metal%20material%20to%20the%20front%20sphere%20%28spp%20128%29.jpg" alt="Glass and metal spheres in the Cornell Box" width="390"/><br>
-  <sub><i>Left: the metal sphere mirrors the room. Right: the glass sphere added — note the red/green <b>color bleeding</b> on the floor from indirect light.</i></sub>
+  <sub><i>Left: the metal sphere mirrors the room. Right: the glass sphere added - note the red/green <b>color bleeding</b> on the floor from indirect light.</i></sub>
 </p>
 
 <p align="center">
@@ -71,23 +71,23 @@ finished CPU-rendered frame; it does no rendering itself.
 
 ## How It Works
 
-The life of a single pixel, start to finish:
+This is the life of a single pixel, start to finish.
 
 1. **Cast a ray** from the camera through the pixel (pinhole camera).
-2. **Sample many times** — fire N jittered rays per pixel (anti-aliasing + Monte Carlo sampling).
-3. **Find the nearest surface** the ray hits.
-4. **Scatter or emit** — the surface's material decides how the ray bounces (diffuse / mirror /
+2. **Sample many times** - fire N jittered rays per pixel (anti-aliasing + Monte Carlo sampling).
+3. **Find the nearest surface** - where the ray hits.
+4. **Scatter or Emit** - the surface's material decides how the ray bounces (diffuse / mirror /
    glass) and whether it glows.
-5. **Follow the path** — recurse along the bounce, gathering light:
+5. **Follow the path** - recurse along the bounce, gathering light:
    `emitted + albedo × (light from the rest of the path)`.
 6. **Average** the N samples → an estimate of the true light reaching that pixel.
-7. **Tone-map + gamma** the linear HDR result down to a displayable color.
-8. **Display** via a DirectX 11 fullscreen texture.
+7. **Tone-map + Gamma** the linear HDR result down to a displayable color.
+8. **Display** via DirectX 11.
 
-**The core idea:** the true color of a pixel is an **integral** over every path light could take to
-reach it — impossible to solve directly, so I estimate it with **Monte Carlo**: trace many random
-light paths and average. Global illumination, soft shadows, and color bleeding all *emerge* from
-this — none are special-cased.
+**The core idea:** the color of a pixel is an **integral** over every path light could take to
+reach it, which is impossible to solve directly. So I estimate it with **Monte Carlo**, tracing many random
+light paths and calculating the average. Global illumination, soft shadows, and color bleeding all *emerge* from
+this.
 
 ---
 
@@ -95,8 +95,8 @@ this — none are special-cased.
 
 ### Monte Carlo integration of the rendering equation
 Each pixel is an integral over all incoming light; I estimate it by averaging random paths. Noise
-falls as **1/√N**, so halving it costs **4×** the samples — the central performance tension of the
-whole renderer. The integrator itself is small — it *is* the rendering equation, written as a single
+falls as **1/√N**, so halving it costs **4×** the samples - the central performance tension of the
+whole renderer. The integrator itself is small - it *is* the rendering equation, written as a single
 unbranching recursive path:
 
 ```cpp
@@ -120,14 +120,19 @@ math::vec3 tracePath(Ray ray, int depth, RNG& rng)
   <img src="./resources/Cornell%20Box%20-%20spp%201.png" alt="1 sample per pixel" width="250"/>
   <img src="./resources/Cornell%20Box%20-%20spp%2016.png" alt="16 samples per pixel" width="250"/>
   <img src="./resources/Cornell%20Box%20-%20spp%20128.png" alt="128 samples per pixel" width="250"/><br>
-  <sub><i>The same scene at <b>1 / 16 / 128</b> samples per pixel — Monte Carlo noise converging as 1/√N.</i></sub>
+  <sub><i>The same scene at <b>1 / 16 / 128</b> samples per pixel - Monte Carlo noise converging as 1/√N.</i></sub>
 </p>
 
 ### Materials as a polymorphic interface
-Every surface implements a `Scatter()` / `Emitted()` interface; **shape and material are separate**
-(a shape holds a `Material*` and delegates shading), so any geometry can wear any material. I chose
-polymorphism for clarity and extensibility, aware it costs virtual dispatch in a hot loop — a
-data-oriented, batch-by-material design would be faster, and is the route a production renderer takes.
+`Material` is an abstract base with two virtual methods: `Scatter()` (how a ray bounces off the
+surface) and `Emitted()` (light the surface emits). `Lambertian`, `Metal`, `Dielectric`, and
+`DiffuseLight` implement them. Geometry and shading are decoupled: each `Object` holds a `Material*`,
+and `tracePath` calls `Scatter()` / `Emitted()` through the base pointer without branching on the
+material type.
+
+The tradeoff is a virtual call per ray-surface hit. A data-oriented approach - grouping hits by
+material and shading each group in one loop - removes that indirection, which is what production
+renderers do.
 
 ```cpp
 class Material {
@@ -158,7 +163,7 @@ air→glass and glass→air. Averaged over samples, it reproduces the correct re
 
 ### From HDR light to a displayable image (tone-map + gamma)
 The renderer works in unbounded **linear light**, and compresses to a displayable image only at the
-very end — **Reinhard tone-mapping** (so bright highlights don't clip to flat white) followed by
+very end - **Reinhard tone-mapping** (so bright highlights don't clip to flat white) followed by
 **gamma correction** (so midtones aren't crushed). Skipping it leaves the raw render dark and muddy:
 
 <p align="center">
@@ -168,7 +173,7 @@ very end — **Reinhard tone-mapping** (so bright highlights don't clip to flat 
 </p>
 
 ### Why trace *backward* (from the camera)
-Light physically flows light → surfaces → camera, but I trace the reverse. It's valid because light
+Physically, light flows from the source → surfaces → camera, but I trace the reverse. It's valid because light
 transport is **reversible**, and it's far more efficient: starting at the camera, **every ray
 contributes to a pixel**, whereas photons fired from the light would almost never reach the camera.
 
@@ -176,10 +181,10 @@ contributes to a pixel**, whereas photons fired from the light would almost neve
 
 ## Performance
 
-> **[Phase 2 — in progress]** The renderer is currently **single-threaded** — ~19 s per frame at
+> **[Phase 2 - in progress]** The renderer is currently **single-threaded** - ~19 s per frame at
 > 128 spp (600×600). Next: a hand-built **tile-based thread pool** to parallelize across cores.
 
-### Single-threaded baseline — render time vs. samples-per-pixel
+### Single-threaded baseline - render time vs. samples-per-pixel
 Measured with a `steady_clock` harness (600×600, max depth 8, one thread):
 
 | spp | Render time |
@@ -197,10 +202,10 @@ Render time scales **roughly linearly** with samples at higher counts (64 → 12
 fixed per-pixel overhead dominating at very low sample counts. This **19 s @ 128 spp** is the
 baseline the thread pool below has to beat.
 
-### Multithreaded speedup *(Phase 2 — coming)*
+### Multithreaded speedup *(Phase 2 - coming)*
 | Threads | Render time | Speedup | Efficiency |
 |---:|---:|---:|---:|
-| 1 | 19.09 s | 1.0× | — |
+| 1 | 19.09 s | 1.0× | - |
 | 2 | [FILL] s | [FILL]× | [FILL]% |
 | 4 | [FILL] s | [FILL]× | [FILL]% |
 | 8 | [FILL] s | [FILL]× | [FILL]% |
@@ -210,29 +215,28 @@ thread pool is built (Phase 2)._
 
 **Design:** worker threads pull tiles off a shared work queue (`std::mutex` + `std::condition_variable`).
 A **work queue rather than a static split** because some tiles (the glass sphere) are far slower than
-others — dynamic distribution balances the load. The per-pixel deterministic RNG means **no locks on
+others - dynamic distribution balances the load. The per-pixel deterministic RNG means **no locks on
 the pixel-write path**.
 
 ---
 
 ## Architecture
 
-- `Camera` — generates primary rays (pinhole).
-- `Object` (→ `Sphere`, `Rect`) — geometry / ray intersection.
-- `Material` (→ `Lambertian`, `Metal`, `Dielectric`, `DiffuseLight`) — shading / scattering.
-- `Raytracer` — scene + the `tracePath` integrator + sampling loop.
-- `Renderer` — DirectX 11 display of the CPU framebuffer.
+- `Camera` - generates primary rays (pinhole).
+- `Object` (→ `Sphere`, `Rect`) - geometry / ray intersection.
+- `Material` (→ `Lambertian`, `Metal`, `Dielectric`, `DiffuseLight`) - shading / scattering.
+- `Raytracer` - scene + the `tracePath` integrator + sampling loop.
+- `Renderer` - DirectX 11 display of the CPU framebuffer.
 
 ---
 
 ## Roadmap
-- **Multithreading** — tile-based thread pool + benchmark (in progress)
-- **Next-event estimation** — sample the light directly for much less noise
-- **Golden-image regression tests + CI** — verify renders don't drift
-- Russian roulette termination · environment cubemap · BVH acceleration
+- **Multithreading** - tile-based thread pool + benchmark (in progress)
+- **Next-event estimation** - sample the light directly for much less noise
+- **Golden-image regression tests + CI** - verify renders don't drift
 
 ---
 
 ## References
-- *Ray Tracing in One Weekend* — Peter Shirley
-- The Cornell Box — Cornell University Program of Computer Graphics
+- *Ray Tracing in One Weekend* - Peter Shirley
+- The Cornell Box - Cornell University Program of Computer Graphics
