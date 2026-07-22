@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# AI tools
+*.claude/
+
 # User-specific files
 *.rsuser
 *.suo
@@ -361,3 +364,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# vcpkg manifest-mode output (built dependencies — restored from vcpkg.json on build)
+vcpkg_installed/
