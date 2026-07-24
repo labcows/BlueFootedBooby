@@ -12,7 +12,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 int main()
 {
-    const int width = 600, height = 600; // square, to match the Cornell Box (Appendix A) aspect
+    const int width = 1200, height = 1200; // square, to match the Cornell Box (Appendix A) aspect
 
     WNDCLASSEX wc = {
         sizeof(WNDCLASSEX),
