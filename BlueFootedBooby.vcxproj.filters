@@ -77,9 +77,6 @@
     <ClInclude Include="Type.h">
       <Filter>Header Files\Math</Filter>
     </ClInclude>
-    <ClInclude Include="Vector.h">
-      <Filter>Header Files\Math</Filter>
-    </ClInclude>
     <ClInclude Include="Texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
