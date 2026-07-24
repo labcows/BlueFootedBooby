@@ -4,52 +4,92 @@
 > simulates real light transport (global illumination, soft shadows, glass, metal).
 
 <p align="center">
-  <img src="./resources/hero.jpg" alt="Cornell Box path-traced render with glass and metal spheres" width="640"/><br>
-  <sub><i>Cornell Box - path-traced with global illumination, a glass sphere, and a metal sphere.</i></sub>
+  <img src="./resources/Cornell%20Box%20-%20spp%201024%20depth%2016.png" alt="Cornell Box path-traced render with glass and metal spheres" width="640"/><br>
+  <sub><i>Cornell Box - path-traced with global illumination, a glass sphere, and a metal sphere.<br>
+  1024 samples/pixel, max path depth 16, 1200×1200 - a sample budget the 10× parallel speedup made affordable.</i></sub>
 </p>
 
 ---
 
-## Table of Contents
-1. [Motivation](#motivation)
-2. [Overview](#overview)
-3. [Gallery](#gallery)
-4. [How It Works](#how-it-works)
-5. [Technical Highlights](#technical-highlights)
-6. [Performance](#performance)
-7. [Architecture](#architecture)
-8. [Roadmap](#roadmap)
-9. [References](#references)
+## Project Summary
 
----
-
-## Motivation
-
-My eyes render the world automatically - the way a light source delicately interacts with every
+I do not have to tell my eyes how to render the world. They just do it for me automatically - the way a light source delicately interacts with every
 material around it, moment to moment. I kept coming back to one question: **how would I draw *that*
-on a screen?** Not "how do I use a game engine?" but *why* does light look the way it does, and how
-do you reproduce it from first principles?
+from first principles?** Not "how do I use a game engine?" but *why* light looks the way it does. I
+built this to answer that question for myself.
 
-I built this to answer that question for myself.
+**Blue-Footed Booby is a Monte Carlo path tracer written from scratch in modern C++**, rendering the
+classic Cornell Box with physically-based light transport. "From scratch" means I programmed every
+ray/light-transport line. The dependencies are **GLM** (vector math), **Dear ImGui**
+(debug UI), and **DirectX 11** - which merely *displays* the finished CPU-rendered frame, a GPU
+renderer being on the roadmap in the future.
+
+- ⚡ **10.2× faster** with C++17 parallel execution - a 128 spp frame from **19.1 s → 1.9 s** (AMD Ryzen 7 9700X, 8-core / 16-thread)
+- 🌐 **Monte Carlo global illumination** - soft shadows and color bleeding *emerge* from the rendering equation
+- 🔬 **Physically-based materials** - dielectric glass (Fresnel + refraction + total internal reflection) and metal (mirror + roughness)
+- 🎚️ **Cosine-weighted importance sampling**, Reinhard tone-mapping + gamma
+- 🖥️ Real-time **DirectX 11** viewport with live debug views (normals / depth / albedo)
 
 ---
 
-## Overview
+## Performance
 
-**What it is:** a **Monte Carlo path tracer** built from scratch in modern C++ that renders the classic
-Cornell Box with physically-based light transport.
+> **[Phase 2]** Parallelised with C++17 parallel algorithms (`std::execution::par`) for a **10.2×
+> speedup** - a 128 spp frame dropped from **19.1 s to 1.9 s** on an AMD Ryzen 7 9700X (8-core /
+> 16-thread). Next: a hand-built **tile-based thread pool** to replace the standard algorithm and
+> compare the two.
 
-**"From scratch" means:** all ray/light-transport code is mine. The dependencies are
-**GLM** (vector math), **Dear ImGui** (debug UI), and **DirectX 11** - which only *displays* the
-finished CPU-rendered frame; it does no rendering itself, though a GPU renderer is on the roadmap.
+### Render time vs. samples-per-pixel
+Measured with a `steady_clock` harness (600×600, max depth 8, Release build, AMD Ryzen 7 9700X).
+Both columns are the same scene on the same machine - and because the per-pixel RNG is seeded
+deterministically from `(x, y, sample)`, the parallel run produces an **identical image**, which is
+what makes the comparison meaningful rather than just faster.
 
-**Highlights**
-- Monte Carlo integration of the rendering equation (diffuse global illumination)
-- Emissive **area lights** - soft shadows and color bleeding
-- **Dielectric (glass)** - Fresnel reflectance, refraction, total internal reflection
-- **Metal** - mirror reflection with adjustable roughness
-- **Cosine-weighted importance sampling**, tone-mapping + gamma
-- Real-time **DirectX 11** viewport with live debug views (normals / depth / albedo)
+| spp | 1 thread | 16 threads | Speedup |
+|---:|---:|---:|---:|
+| 1 | 0.52 s | 0.045 s | 11.6× |
+| 2 | 0.65 s | 0.058 s | 11.2× |
+| 4 | 0.93 s | 0.085 s | 10.9× |
+| 8 | 1.48 s | 0.143 s | 10.3× |
+| 16 | 2.57 s | 0.250 s | 10.3× |
+| 32 | 4.90 s | 0.486 s | 10.1× |
+| 64 | 9.44 s | 0.945 s | 10.0× |
+| 128 | 19.09 s | 1.865 s | **10.2×** |
+
+### From single-threaded to parallel - the reasoning
+The 1/√N curve above *is* the problem, in one line: a clean image needs **many** samples, and each
+one costs the same. So I started where any optimization should - by **measuring**, not guessing. The
+single-threaded baseline was **19 s for a 128 spp frame**, and a genuinely clean hero image wants
+closer to 1024 spp - minutes per render. That breaks the tight edit → render → look loop this kind
+of work lives on.
+
+Two observations made the fix clear:
+
+- **Path tracing is parallel.** Every pixel is an independent estimate; no pixel needs
+  another pixel's result. There is nothing to coordinate except handing out the work.
+- **The data structure design was already lock-free.** Each pixel seeds its own RNG from `(x, y, sample)`, so there
+  is no shared mutable state on the hot path. There is nothing to lock. A welcome consequence: the parallel
+  image comes out **bit-identical** to the serial one, which is exactly how I verified the
+  parallelization was correct (a diff of the two buffers must be zero).
+
+So the first step was the pragmatic one - `std::execution::par` across the image rows - for the
+**10.2×** in the [Performance](#performance) table. The *next* step, a hand-built tile-based thread
+pool, is less about more speed and more about understanding the machinery `par` hides: a work queue,
+`std::mutex`, `std::condition_variable`, and balancing tiles of uneven cost (the glass sphere is far
+heavier than an empty wall). Reaching for the standard algorithm first and the manual implementation
+second is deliberate: ship the result, then go learn the layer underneath it.
+
+
+
+### Next: a hand-built tile-based thread pool
+`std::execution::par` was the pragmatic win; the thread pool is the interesting engineering, and
+having both makes the comparison the point. Planned design: worker threads pull 32×32 tiles off a
+shared work queue (`std::mutex` + `std::condition_variable`). A **work queue rather than a static
+split** because some tiles (the glass sphere) are far slower than others - dynamic distribution
+balances the load. The per-pixel deterministic RNG means **no locks on the pixel-write path**.
+
+_A tile-progress GIF (tiles completing in parallel across worker threads) will go here once the pool
+is built._
 
 ---
 
@@ -69,7 +109,7 @@ finished CPU-rendered frame; it does no rendering itself, though a GPU renderer 
 
 ---
 
-## How It Works
+## The Life of A Pixel
 
 This is the life of a single pixel, start to finish.
 
@@ -101,11 +141,11 @@ unbranching recursive path:
 
 ```cpp
 // One random, unbranching light path (backward, from the camera).
-math::vec3 tracePath(Ray ray, int depth, RNG& rng)
+math::vec3 tracePath(const Ray ray, int depth, RNG& rng)
 {
-    if (depth <= 0)          return math::vec3(0.0f);   
-    Hit hit = FindNearestCollision(ray);
-    if (hit.d < 0.0f)        return math::vec3(0.0f);   
+    if (depth <= 0) return math::vec3(0.0f);   
+    Hit hit = FindClosestCollision(ray);
+    if (hit.distance < 0.0f) return math::vec3(0.0f);   
 
     math::vec3 emitted = hit.obj->material->Emitted();
 
@@ -117,10 +157,13 @@ math::vec3 tracePath(Ray ray, int depth, RNG& rng)
 ```
 
 <p align="center">
-  <img src="./resources/Cornell%20Box%20-%20spp%201.png" alt="1 sample per pixel" width="250"/>
-  <img src="./resources/Cornell%20Box%20-%20spp%2016.png" alt="16 samples per pixel" width="250"/>
-  <img src="./resources/Cornell%20Box%20-%20spp%20128.png" alt="128 samples per pixel" width="250"/><br>
-  <sub><i>The same scene at <b>1 / 16 / 128</b> samples per pixel - Monte Carlo noise converging as 1/√N.</i></sub>
+  <img src="./resources/Cornell%20Box%20-%20spp%201.png" alt="1 sample per pixel" width="195"/>
+  <img src="./resources/Cornell%20Box%20-%20spp%2016.png" alt="16 samples per pixel" width="195"/>
+  <img src="./resources/Cornell%20Box%20-%20spp%20128.png" alt="128 samples per pixel" width="195"/>
+  <img src="./resources/Cornell%20Box%20-%20spp%201024.png" alt="1024 samples per pixel" width="195"/><br>
+  <sub><i>The same scene at <b>1 / 16 / 128 / 1024</b> samples per pixel - Monte Carlo noise converging as 1/√N.<br>
+  Every other parameter is held fixed; only the sample count changes. Each step is 8× the samples for
+  ~2.8× less noise - visibly diminishing returns, and the reason the 10× speedup mattered.</i></sub>
 </p>
 
 ### Materials as a polymorphic interface
@@ -172,66 +215,12 @@ very end - **Reinhard tone-mapping** (so bright highlights don't clip to flat wh
   <sub><i>Before (raw linear output) → after (Reinhard tone-map + gamma).</i></sub>
 </p>
 
-### Why trace *backward* (from the camera)
-Physically, light flows from the source → surfaces → camera, but I trace the reverse. It's valid because light
-transport is **reversible**, and it's far more efficient: starting at the camera, **every ray
-contributes to a pixel**, whereas photons fired from the light would almost never reach the camera.
-
----
-
-## Performance
-
-> **[Phase 2 - in progress]** The renderer is currently **single-threaded** - ~19 s per frame at
-> 128 spp (600×600). Next: a hand-built **tile-based thread pool** to parallelize across cores.
-
-### Single-threaded baseline - render time vs. samples-per-pixel
-Measured with a `steady_clock` harness (600×600, max depth 8, one thread):
-
-| spp | Render time |
-|---:|---:|
-| 1 | 0.52 s |
-| 2 | 0.65 s |
-| 4 | 0.93 s |
-| 8 | 1.48 s |
-| 16 | 2.57 s |
-| 32 | 4.90 s |
-| 64 | 9.44 s |
-| 128 | 19.09 s |
-
-Render time scales **roughly linearly** with samples at higher counts (64 → 128 spp ≈ 2×), with
-fixed per-pixel overhead dominating at very low sample counts. This **19 s @ 128 spp** is the
-baseline the thread pool below has to beat.
-
-### Multithreaded speedup *(Phase 2 - coming)*
-| Threads | Render time | Speedup | Efficiency |
-|---:|---:|---:|---:|
-| 1 | 19.09 s | 1.0× | - |
-| 2 | [FILL] s | [FILL]× | [FILL]% |
-| 4 | [FILL] s | [FILL]× | [FILL]% |
-| 8 | [FILL] s | [FILL]× | [FILL]% |
-
-_A tile-progress GIF (tiles completing in parallel across worker threads) will go here once the
-thread pool is built (Phase 2)._
-
-**Design:** worker threads pull tiles off a shared work queue (`std::mutex` + `std::condition_variable`).
-A **work queue rather than a static split** because some tiles (the glass sphere) are far slower than
-others - dynamic distribution balances the load. The per-pixel deterministic RNG means **no locks on
-the pixel-write path**.
-
----
-
-## Architecture
-
-- `Camera` - generates primary rays (pinhole).
-- `Object` (→ `Sphere`, `Rect`) - geometry / ray intersection.
-- `Material` (→ `Lambertian`, `Metal`, `Dielectric`, `DiffuseLight`) - shading / scattering.
-- `Raytracer` - scene + the `tracePath` integrator + sampling loop.
-- `Renderer` - DirectX 11 display of the CPU framebuffer.
-
 ---
 
 ## Roadmap
-- **Multithreading** - tile-based thread pool + benchmark (in progress)
+- ✅ **Parallel rendering** - `std::execution::par`, **10.2× speedup** ([Performance](#performance))
+- **Hand-built tile-based thread pool** - replace the standard algorithm with a work queue
+  (`std::mutex` + `std::condition_variable`) and chart the scaling curve across thread counts
 - **Next-event estimation** - sample the light directly for much less noise
 - **Golden-image regression tests + CI** - verify renders don't drift
 
