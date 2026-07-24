@@ -12,20 +12,25 @@
 #include <vector>
 #include <chrono>
 #include <iomanip>
+#include <execution>
+#include <numeric>
 
 class Raytracer
 {
 public:
 	int width, height;
+	Camera camera;
+
 	Light light;
 	std::vector<std::unique_ptr<Object>> objects;
-	Camera camera;
 
 	enum class DebugView { None, Normals, Depth, Albedo, PathTraced };
 	DebugView debugView = DebugView::Normals;
+	int spp = 1024;
+	int maxDepth = 16;
 
-	int spp = 128;
-	int maxDepth = 8;
+	std::vector<uint32_t> horizontalIter, verticalIter;
+	static constexpr bool multithreaded = true;
 
 	Raytracer(const int& width, const int &height)
 		:width(width), height(height),
@@ -35,6 +40,11 @@ public:
 				40.0f,								 // vFovDegrees
 				float(width) / float(height))		 // aspect
 	{
+		horizontalIter.resize(width);
+		verticalIter.resize(height);
+		std::iota(horizontalIter.begin(), horizontalIter.end(), 0);
+		std::iota(verticalIter.begin(), verticalIter.end(), 0);
+
 		const math::vec3 white(0.73f, 0.73f, 0.73f);
 		const math::vec3 red(0.65f, 0.05f, 0.05f);
 		const math::vec3 green(0.12f, 0.45f, 0.15f);
@@ -61,8 +71,6 @@ public:
 
 		light = Light{ {278.0f, 500.0f, 279.5f} };
 	}
-
-	~Raytracer(){}
 
 	Hit FindClosestCollision(const Ray& ray)
 	{
@@ -239,7 +247,29 @@ public:
 
 	void renderPathTraced(std::vector<math::vec4>& pixels, int spp, int maxDepth)
 	{
-#pragma omp parallel for
+		if constexpr (multithreaded)
+		{
+			std::for_each(std::execution::par, verticalIter.begin(), verticalIter.end(),
+				[this, &pixels, spp, maxDepth](uint32_t j)
+				{
+					std::for_each(horizontalIter.begin(), horizontalIter.end(),
+						[this, &pixels, j, spp, maxDepth](uint32_t i)
+						{
+							RNG rng(makeSeed(i, j, 0));
+							math::vec3 color(0.0f);
+							for (int s = 0; s < spp; s++)
+							{
+								const float u = (i + rng.uniform()) / float(width);
+								const float v = (j + rng.uniform()) / float(height);
+								Ray ray = camera.GenerateRay(u, v);
+								color += tracePath(ray, maxDepth, rng);
+							}
+							pixels[i + width * j] = math::vec4(toneMapGamma(color / float(spp)), 1.0f);
+						});
+				});
+		}
+		
+	else
 		for (int j = 0; j < height; j++)
 			for (int i = 0; i < width; i++)
 			{
@@ -267,6 +297,7 @@ public:
 
 	void benchmarkSppSweep(const std::vector<int>& sppList, int depth = 8)
 	{
+		const unsigned threads = multithreaded ? std::thread::hardware_concurrency() : 1u;
 		for (int s : sppList)
 		{
 			const double seconds = benchmarkRender(s, depth);
@@ -274,7 +305,8 @@ public:
 			          << " res=" << width << "x" << height
 			          << " spp=" << s
 			          << " depth=" << depth
-			          << " threads=1"
+			          << " threads=" 
+						<< threads
 			          << " time=" << std::fixed << std::setprecision(3) << seconds << "s"
 			          << std::endl;
 		}
@@ -318,7 +350,6 @@ public:
 			return;
 		}
 
-#pragma omp parallel for
 		for (int j = 0; j < height; j++)
 			for (int i = 0; i < width; i++)
 			{
