@@ -367,3 +367,10 @@ FodyWeavers.xsd
 
 # vcpkg manifest-mode output (built dependencies — restored from vcpkg.json on build)
 vcpkg_installed/
+
+# Ignore Dear ImGui configuration files
+imgui.ini
+imgui*.ini
+
+#docs folder - temp
+docs/
