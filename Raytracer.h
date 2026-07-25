@@ -268,22 +268,21 @@ public:
 						});
 				});
 		}
-		
-	else
-		for (int j = 0; j < height; j++)
-			for (int i = 0; i < width; i++)
-			{
-				RNG rng(makeSeed(i, j, 0));
-				math::vec3 color(0.0f);
-				for (int s = 0; s < spp; s++)
+		else
+			for (int j = 0; j < height; j++)
+				for (int i = 0; i < width; i++)
 				{
-					const float u = (i + rng.uniform()) / float(width);
-					const float v = (j + rng.uniform()) / float(height);
-					Ray ray = camera.GenerateRay(u, v);
-					color += tracePath(ray, maxDepth, rng);
+					RNG rng(makeSeed(i, j, 0));
+					math::vec3 color(0.0f);
+					for (int s = 0; s < spp; s++)
+					{
+						const float u = (i + rng.uniform()) / float(width);
+						const float v = (j + rng.uniform()) / float(height);
+						Ray ray = camera.GenerateRay(u, v);
+						color += tracePath(ray, maxDepth, rng);
+					}
+					pixels[i + width * j] = math::vec4(toneMapGamma(color / float(spp)), 1.0f);
 				}
-				pixels[i + width * j] = math::vec4(toneMapGamma(color / float(spp)), 1.0f);
-			}
 	}
 
 	double benchmarkRender(int sampleCount, int depth) const
