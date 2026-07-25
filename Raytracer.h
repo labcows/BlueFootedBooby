@@ -72,7 +72,7 @@ public:
 		light = Light{ {278.0f, 500.0f, 279.5f} };
 	}
 
-	Hit FindClosestCollision(const Ray& ray)
+	Hit FindClosestCollision(const Ray& ray) const
 	{
 		float closestD = 1e30f;
 		Hit closestHit;
@@ -97,7 +97,7 @@ public:
 		return closestHit;
 	}
 
-	math::vec3 traceRay(Ray& ray, const int recurseLevel)
+	math::vec3 traceRay(const Ray& ray, const int recurseLevel) const
 	{
 
 		if (recurseLevel < 0)
@@ -192,7 +192,7 @@ public:
 		return 0.5f * hit.normal + 0.5f;
 	}
 
-	math::vec3 shade(Ray& ray)
+	math::vec3 shade(const Ray& ray) const
 	{
 		if (debugView == DebugView::None)
 			return traceRay(ray, 5);
@@ -207,7 +207,7 @@ public:
 		return shadeNormal(hit);
 	}
 
-	void renderDepthView(std::vector<math::vec4>& pixels)
+	void renderDepthView(std::vector<math::vec4>& pixels) const
 	{
 		std::vector<float> dist(size_t(width) * height, -1.0f);
 		float dMin = 1e30f, dMax = 0.0f;
@@ -245,7 +245,7 @@ public:
 		return color;
 	}
 
-	void renderPathTraced(std::vector<math::vec4>& pixels, int spp, int maxDepth)
+	void renderPathTraced(std::vector<math::vec4>& pixels, int spp, int maxDepth) const
 	{
 		if constexpr (multithreaded)
 		{
@@ -286,7 +286,7 @@ public:
 			}
 	}
 
-	double benchmarkRender(int sampleCount, int depth)
+	double benchmarkRender(int sampleCount, int depth) const
 	{
 		std::vector<math::vec4> scratch(size_t(width) * height);
 		const auto t0 = std::chrono::steady_clock::now();
@@ -295,7 +295,7 @@ public:
 		return std::chrono::duration<double>(t1 - t0).count();
 	}
 
-	void benchmarkSppSweep(const std::vector<int>& sppList, int depth = 8)
+	void benchmarkSppSweep(const std::vector<int>& sppList, int depth = 8) const
 	{
 		const unsigned threads = multithreaded ? std::thread::hardware_concurrency() : 1u;
 		for (int s : sppList)
@@ -312,7 +312,7 @@ public:
 		}
 	}
 
-	math::vec3 tracePath(const Ray ray, int depth, RNG& rng)
+	math::vec3 tracePath(const Ray ray, int depth, RNG& rng) const
 	{
 		if (depth <= 0) return math::vec3(0.0f);
 
@@ -334,7 +334,7 @@ public:
 	}
 
 
-	void Render(std::vector<math::vec4>& pixels)
+	void Render(std::vector<math::vec4>& pixels) const
 	{
 		std::fill(pixels.begin(), pixels.end(), math::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 
