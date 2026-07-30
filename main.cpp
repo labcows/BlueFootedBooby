@@ -83,7 +83,7 @@ int main()
             // Debug controls: pick which view the ray tracer renders.
             ImGui::Begin("Debug");
             {
-                const char* items[] = { "None (Phong)", "Normals", "Depth", "Albedo", "Path Traced" };
+                const char* items[] = { "Normals(Phong)", "Normals", "Depth", "Albedo", "Path Traced", "Path Traced (Tiled)" };
                 int mode = (int)renderer->raytracer.debugView;
                 if (ImGui::Combo("View", &mode, items, IM_ARRAYSIZE(items)))
                 {
@@ -92,10 +92,17 @@ int main()
                 }
             }
 
-            // Phase 2: run a single-threaded spp benchmark; results print to the console.
-            // (The window freezes while it renders — that's expected.)
-            if (ImGui::Button("Benchmark spp sweep (1..128)"))
-                renderer->raytracer.benchmarkSppSweep({ 1, 2, 4, 8, 16, 32, 64, 128 });
+            // Phase 2 benchmarks; results print to the console.
+            // (The window freezes while they render — that's expected.)
+            if (ImGui::Button("Compare render modes (serial / par / tiled)"))
+                renderer->raytracer.benchmarkCompare({ 1, 4, 16, 64, 128 });
+
+            if (ImGui::Button("Benchmark spp sweep - tiled pool"))
+                renderer->raytracer.benchmarkSppSweep({ 1, 2, 4, 8, 16, 32, 64, 128 },
+                                                      Raytracer::RenderMode::TiledPool);
+
+            if (ImGui::Button("Thread scaling (1..16 workers)"))
+                renderer->raytracer.benchmarkThreadScaling({ 1, 2, 4, 8, 12, 16 });
 
             ImGui::End();
 
