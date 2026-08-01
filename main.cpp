@@ -83,7 +83,7 @@ int main()
             // Debug controls: pick which view the ray tracer renders.
             ImGui::Begin("Debug");
             {
-                const char* items[] = { "Normals(Phong)", "Normals", "Depth", "Albedo", "Path Traced", "Path Traced (Tiled)" };
+                const char* items[] = { "None (Phong)", "Normals", "Depth", "Albedo", "Path Traced", "Path Traced (Tiled)" };
                 int mode = (int)renderer->raytracer.debugView;
                 if (ImGui::Combo("View", &mode, items, IM_ARRAYSIZE(items)))
                 {

@@ -374,3 +374,7 @@ imgui*.ini
 
 #docs folder - temp
 docs/
+
+# Local working notes, not part of the published project
+renderer_portfolio_spec.md
+resources/*.txt

@@ -547,7 +547,6 @@ public:
 	void Render(std::vector<math::vec4>& pixels) const
 	{
 		std::fill(pixels.begin(), pixels.end(), math::vec4(0.0f, 0.0f, 0.0f, 1.0f));
-		showTileAnalysis();
 
 		if (debugView == DebugView::Depth)
 		{
