@@ -355,7 +355,7 @@ public:
 	{
 		std::vector<Tile> tiles = buildTiles();
 
-		int size = tiles.size();
+		const size_t size = tiles.size();
 		std::cout << "Total number of tiles: "
 			<< size
 			<< ", last tile:  "
