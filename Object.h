@@ -4,8 +4,7 @@
 #include "Hit.h"
 #include "Ray.h"
 #include "Texture.h"
-
-class Material;
+#include "Material.h"
 
 class Object
 {
