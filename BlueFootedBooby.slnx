@@ -4,4 +4,5 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="BlueFootedBooby.vcxproj" Id="baf82506-b7f8-435e-8bc7-0baaf5810634" />
+  <Project Path="BlueFootedBoobyTests/BlueFootedBoobyTests.vcxproj" Id="0c260f0a-2291-48e8-b96b-fb59dca4ea63" />
 </Solution>

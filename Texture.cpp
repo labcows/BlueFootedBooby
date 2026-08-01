@@ -1,3 +1,4 @@
+#include "pch.h"
 #define STB_IMAGE_IMPLEMENTATION
 #pragma warning(push)
 #pragma warning(disable : 26819 6262)
