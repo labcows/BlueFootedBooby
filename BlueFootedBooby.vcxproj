@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -148,9 +148,9 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="Renderer.cpp" />
-    <ClCompile Include="Texture.cpp" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\Renderer.cpp" />
+    <ClCompile Include="src\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
@@ -159,22 +159,22 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Hit.h" />
-    <ClInclude Include="Light.h" />
-    <ClInclude Include="Ray.h" />
-    <ClInclude Include="Sphere.h" />
-    <ClInclude Include="Texture.h" />
-    <ClInclude Include="ThreadPool.h" />
-    <ClInclude Include="Triangle.h" />
-    <ClInclude Include="Type.h" />
-    <ClInclude Include="Object.h" />
-    <ClInclude Include="pch.h" />
-    <ClInclude Include="Renderer.h" />
-    <ClInclude Include="Raytracer.h" />
-    <ClInclude Include="Camera.h" />
-    <ClInclude Include="Rect.h" />
-    <ClInclude Include="Material.h" />
-    <ClInclude Include="Random.h" />
+    <ClInclude Include="src\Hit.h" />
+    <ClInclude Include="src\Light.h" />
+    <ClInclude Include="src\Ray.h" />
+    <ClInclude Include="src\Sphere.h" />
+    <ClInclude Include="src\Texture.h" />
+    <ClInclude Include="src\ThreadPool.h" />
+    <ClInclude Include="src\Triangle.h" />
+    <ClInclude Include="src\Type.h" />
+    <ClInclude Include="src\Object.h" />
+    <ClInclude Include="src\pch.h" />
+    <ClInclude Include="src\Renderer.h" />
+    <ClInclude Include="src\Raytracer.h" />
+    <ClInclude Include="src\Camera.h" />
+    <ClInclude Include="src\Rect.h" />
+    <ClInclude Include="src\Material.h" />
+    <ClInclude Include="src\Random.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="PS.hlsl">
