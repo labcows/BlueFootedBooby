@@ -5,14 +5,14 @@
 TEST(ThreadPoolTest, EveryThreadExecutesOnlyOneTime)
 {
     ThreadPool pool(16);
-    std::atomic<int> counter{ 0 };
     const int jobCount = 1000;
-
+    std::vector<int> counts(jobCount, 0);
     for (int i = 0; i < jobCount; i++)
-        pool.Submit([&counter] { counter++; });
+        pool.Submit([&counts, i] { counts[i]++; });
 
     pool.WaitAll();
-    EXPECT_EQ(counter, jobCount);
+    for (int i = 0; i < jobCount; i++)
+        EXPECT_EQ(counts[i], 1);
 }   
 
 TEST(ThreadPoolTest, ThreadPoolWaitsAllWorkers)
@@ -30,7 +30,7 @@ TEST(ThreadPoolTest, ThreadPoolWaitsAllWorkers)
     EXPECT_EQ(counter, 20);
 }
 
-TEST(ThreadPoolTest, )
+TEST(ThreadPoolTest, ReusesPoolAcrossBatches)
 {
     ThreadPool pool(8);
     std::atomic<int> counter{ 0 };
