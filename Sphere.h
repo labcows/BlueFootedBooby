@@ -14,6 +14,8 @@ public:
 
 	Hit CheckRayCollision(const Ray& ray) const override
 	{
+		// https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
+
 		Hit hit = Hit{ -1.0f, math::vec3(0.0f), math::vec3(0.0f) };
 
 		const float b = 2.0f * math::dot(ray.dir, ray.start - this->center);
