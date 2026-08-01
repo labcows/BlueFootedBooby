@@ -24,7 +24,7 @@ ray/light-transport line. The dependencies are **GLM** (vector math), **Dear ImG
 (debug UI), and **DirectX 11** - which merely *displays* the finished CPU-rendered frame, a GPU
 renderer being on the roadmap in the future.
 
-- ⚡ **10.2× faster** with C++17 parallel execution - a 128 spp frame from **19.1 s → 1.9 s** (AMD Ryzen 7 9700X, 8-core / 16-thread)
+- ⚡ **~10× faster** with a my own tile-based thread pool - a 128 spp frame at 1200×1200 from **77 s → 7.8 s** (AMD Ryzen 7 9700X, 8-core / 16-thread), verified pixel-identical to the serial render
 - 🌐 **Monte Carlo global illumination** - soft shadows and color bleeding *emerge* from the rendering equation
 - 🔬 **Physically-based materials** - dielectric glass (Fresnel + refraction + total internal reflection) and metal (mirror + roughness)
 - 🎚️ **Cosine-weighted importance sampling**, Reinhard tone-mapping + gamma
@@ -34,62 +34,91 @@ renderer being on the roadmap in the future.
 
 ## Performance
 
-> **[Phase 2]** Parallelised with C++17 parallel algorithms (`std::execution::par`) for a **10.2×
-> speedup** - a 128 spp frame dropped from **19.1 s to 1.9 s** on an AMD Ryzen 7 9700X (8-core /
-> 16-thread). Next: a hand-built **tile-based thread pool** to replace the standard algorithm and
-> compare the two.
+> **[Phase 2]** A 128 spp frame at 1200×1200 renders in **7.8 s instead of 77 s** - a **~10×
+> speedup** on an AMD Ryzen 7 9700X (8-core / 16-thread). Two parallel back-ends are implemented and
+> benchmarked against each other: C++17 `std::execution::par`, and a **hand-built tile-based thread
+> pool**.
 
-### Render time vs. samples-per-pixel
-Measured with a `steady_clock` harness (600×600, max depth 8, Release build, AMD Ryzen 7 9700X).
-Both columns are the same scene on the same machine - and because the per-pixel RNG is seeded
-deterministically from `(x, y, sample)`, the parallel run produces an **identical image**, which is
-what makes the comparison meaningful rather than just faster.
+### Decision to use multithreading after finding out  one frame took 77 seconds to render
+A clean image needs many samples per pixel, and every sample costs the same. On one thread a 128 spp
+frame took **77 seconds**, and a genuinely clean image wants 1024 spp - roughly ten minutes per
+render. At that speed, it takes so much time to program, compile, run, and verity the scene.
 
-| spp | 1 thread | 16 threads | Speedup |
+Two properties of the renderer made parallelising it straightforward:
+
+- **Every pixel is independent.** A pixel's colour never depends on another pixel's result, so there
+  is nothing to coordinate beyond handing out the work.
+- **There is no shared state to lock.** Each pixel seeds its own random number generator from
+  `(x, y, sample)`, so no two threads ever touch the same data.
+
+### Comparing three ways to render the same frame
+
+Measured with a `steady_clock` harness (1200×1200, max depth 8, Release build, Ryzen 7 9700X,
+16 worker threads, 32×32 tiles).
+
+Each cell is wall-clock render time; the figure in parentheses is the speedup over the serial run.
+
+| spp | Serial (1 thread) | `std::execution::par` | Tiled thread pool | Pixel diff |
+|---:|---:|---:|---:|---:|
+| 1 | 2.034 s | 0.179 s (11.35×) | 0.175 s (11.59×) | 0 |
+| 4 | 3.807 s | 0.351 s (10.85×) | 0.348 s (10.93×) | 0 |
+| 16 | 10.629 s | 1.027 s (10.35×) | 1.017 s (10.45×) | 0 |
+| 64 | 39.083 s | 3.863 s (10.12×) | 3.863 s (10.12×) | 0 |
+| 128 | 77.249 s | 7.733 s (9.99×) | 7.784 s (**9.92×**) | 0 |
+
+The last column checks correctness. Because the random number generator is seeded from the pixel
+coordinate, dividing the work differently must not change a single pixel, so the benchmark also
+compares the three framebuffers against each other. All 1.44 M pixels match exactly in every run. A
+data race would show up here as a scattering of differing pixels, which a benchmark that only
+measures time would miss.
+
+The hand-built pool lands within ~1% of `std::execution::par` (backed by Intel TBB on MSVC) - a gap
+small enough to be measurement noise. Most of the gain comes from using all cores at all; the
+scheduling strategy on top, rows versus 32×32 tiles, matters less on this scene, where even a single
+1200-pixel row already mixes cheap wall and expensive glass.
+
+### Speedup from 1 to 16 threads
+
+This table is the reason for writing the pool by hand: `std::execution::par` gives no control over
+thread count, so it cannot produce these measurements at all. (64 spp, 1200×1200.)
+
+| threads | time | speedup | efficiency |
 |---:|---:|---:|---:|
-| 1 | 0.52 s | 0.045 s | 11.6× |
-| 2 | 0.65 s | 0.058 s | 11.2× |
-| 4 | 0.93 s | 0.085 s | 10.9× |
-| 8 | 1.48 s | 0.143 s | 10.3× |
-| 16 | 2.57 s | 0.250 s | 10.3× |
-| 32 | 4.90 s | 0.486 s | 10.1× |
-| 64 | 9.44 s | 0.945 s | 10.0× |
-| 128 | 19.09 s | 1.865 s | **10.2×** |
+| 1 | 37.851 s | 1.00× | 100.0% |
+| 2 | 24.064 s | 1.57× | 78.7% |
+| 4 | 12.652 s | 2.99× | 74.8% |
+| 8 | 6.446 s | 5.87× | 73.4% |
+| 12 | 4.594 s | 8.24× | 68.7% |
+| 16 | 3.819 s | 9.91× | 61.9% |
 
-### From single-threaded to parallel - the reasoning
-The 1/√N curve above *is* the problem, in one line: a clean image needs **many** samples, and each
-one costs the same. So I started where any optimization should - by **measuring**, not guessing. The
-single-threaded baseline was **19 s for a 128 spp frame**, and a genuinely clean hero image wants
-closer to 1024 spp - minutes per render. That breaks the tight edit → render → look loop this kind
-of work lives on.
+The number worth explaining is not the 61.9% at the end but the **21-point drop between one thread
+and two**. Losing that much by adding a single thread is more than imperfect parallelism accounts
+for, so I measured the obvious suspect: CPU clock speed, which drops as more cores become busy.
 
-Two observations made the fix clear:
+| threads | clock |
+|---:|---:|
+| 1 | 5.45 GHz |
+| 2 | 5.29 GHz |
+| 16 | 4.88 GHz |
 
-- **Path tracing is parallel.** Every pixel is an independent estimate; no pixel needs
-  another pixel's result. There is nothing to coordinate except handing out the work.
-- **The data structure design was already lock-free.** Each pixel seeds its own RNG from `(x, y, sample)`, so there
-  is no shared mutable state on the hot path. There is nothing to lock. A welcome consequence: the parallel
-  image comes out **bit-identical** to the serial one, which is exactly how I verified the
-  parallelization was correct (a diff of the two buffers must be zero).
+The measurement only partly supported the hypothesis. At 16 threads the clock is 10.5% lower, which
+does explain a real share of the shortfall - correcting for it turns 9.91× into **11.07×**. But at
+*two* threads the clock is only 2.9% lower, which accounts for about 3 of the 21 lost points.
 
-So the first step was the pragmatic one - `std::execution::par` across the image rows - for the
-**10.2×** in the [Performance](#performance) table. The *next* step, a hand-built tile-based thread
-pool, is less about more speed and more about understanding the machinery `par` hides: a work queue,
-`std::mutex`, `std::condition_variable`, and balancing tiles of uneven cost (the glass sphere is far
-heavier than an empty wall). Reaching for the standard algorithm first and the manual implementation
-second is deliberate: ship the result, then go learn the layer underneath it.
+Correcting every measurement for clock speed narrows the anomaly to one place: from 2 to 16 threads
+(8× the workers) throughput rises **6.83×, an 85% scaling efficiency**. The parallel range scales
+well, and it is the single-threaded measurement that is unusually fast. Two untested explanations
+remain: a lone thread has the entire 32 MB L3 cache to itself, and thread placement is left to the
+operating system, so two threads may end up on the two hardware threads of one physical core instead
+of on two separate cores. Neither has been verified, so neither is claimed here.
 
+### Spending the speedup on image quality
+The point was never a shorter wait. Monte Carlo noise falls as `1/√N`, so the time that previously
+bought 128 spp now buys **1024 spp - a 2.8× cleaner render**, which is what the image at the top of
+this page is. Interactive debug views stay at a low sample count for instant feedback, and the
+sample budget goes where it shows.
 
-
-### Next: a hand-built tile-based thread pool
-`std::execution::par` was the pragmatic win; the thread pool is the interesting engineering, and
-having both makes the comparison the point. Planned design: worker threads pull 32×32 tiles off a
-shared work queue (`std::mutex` + `std::condition_variable`). A **work queue rather than a static
-split** because some tiles (the glass sphere) are far slower than others - dynamic distribution
-balances the load. The per-pixel deterministic RNG means **no locks on the pixel-write path**.
-
-_A tile-progress GIF (tiles completing in parallel across worker threads) will go here once the pool
-is built._
+_A tile-progress GIF (tiles completing in parallel across worker threads) is still to come._
 
 ---
 
@@ -109,9 +138,9 @@ is built._
 
 ---
 
-## The Life of A Pixel
+## How a single pixel gets its colour
 
-This is the life of a single pixel, start to finish.
+Start to finish, for one pixel:
 
 1. **Cast a ray** from the camera through the pixel (pinhole camera).
 2. **Sample many times** - fire N jittered rays per pixel (anti-aliasing + Monte Carlo sampling).
@@ -124,20 +153,20 @@ This is the life of a single pixel, start to finish.
 7. **Tone-map + Gamma** the linear HDR result down to a displayable color.
 8. **Display** via DirectX 11.
 
-**The core idea:** the color of a pixel is an **integral** over every path light could take to
-reach it, which is impossible to solve directly. So I estimate it with **Monte Carlo**, tracing many random
-light paths and calculating the average. Global illumination, soft shadows, and color bleeding all *emerge* from
-this.
+The colour of a pixel is an integral over every path light could take to reach it, which cannot be
+solved directly. It is estimated instead with **Monte Carlo** sampling: trace many random light paths
+and average them. Global illumination, soft shadows, and colour bleeding are not special-cased
+anywhere - they fall out of this.
 
 ---
 
-## Technical Highlights
+## Implementation details
 
-### Monte Carlo integration of the rendering equation
-Each pixel is an integral over all incoming light; I estimate it by averaging random paths. Noise
-falls as **1/√N**, so halving it costs **4×** the samples - the central performance tension of the
-whole renderer. The integrator itself is small - it *is* the rendering equation, written as a single
-unbranching recursive path:
+### Estimating light by tracing random paths
+Each pixel is an integral over all the light arriving at it, which cannot be solved directly, so it
+is estimated by averaging many random paths. Noise falls as **1/√N**, meaning halving it costs **4×**
+the samples - the tension that drives every performance decision in the renderer. The integrator
+itself is short: it is the rendering equation, written as one unbranching recursive path.
 
 ```cpp
 // One random, unbranching light path (backward, from the camera).
@@ -166,7 +195,7 @@ math::vec3 tracePath(const Ray ray, int depth, RNG& rng)
   ~2.8× less noise - visibly diminishing returns, and the reason the 10× speedup mattered.</i></sub>
 </p>
 
-### Materials as a polymorphic interface
+### One material interface, four surface types
 `Material` is an abstract base with two virtual methods: `Scatter()` (how a ray bounces off the
 surface) and `Emitted()` (light the surface emits). `Lambertian`, `Metal`, `Dielectric`, and
 `DiffuseLight` implement them. Geometry and shading are decoupled: each `Object` holds a `Material*`,
@@ -199,12 +228,12 @@ public:
 };
 ```
 
-### Glass: Fresnel, refraction, and total internal reflection
+### Glass: choosing between reflection and refraction
 The dielectric picks reflection or refraction per sample, weighted by the **Fresnel** reflectance
 (Schlick approximation), handles **total internal reflection**, and correctly switches between
 air→glass and glass→air. Averaged over samples, it reproduces the correct reflect/refract blend.
 
-### From HDR light to a displayable image (tone-map + gamma)
+### Turning unbounded light values into screen colours
 The renderer works in unbounded **linear light**, and compresses to a displayable image only at the
 very end - **Reinhard tone-mapping** (so bright highlights don't clip to flat white) followed by
 **gamma correction** (so midtones aren't crushed). Skipping it leaves the raw render dark and muddy:
@@ -218,9 +247,11 @@ very end - **Reinhard tone-mapping** (so bright highlights don't clip to flat wh
 ---
 
 ## Roadmap
-- ✅ **Parallel rendering** - `std::execution::par`, **10.2× speedup** ([Performance](#performance))
-- **Hand-built tile-based thread pool** - replace the standard algorithm with a work queue
-  (`std::mutex` + `std::condition_variable`) and chart the scaling curve across thread counts
+- ✅ **Parallel rendering** - `std::execution::par` and a hand-built tile-based thread pool
+  (`std::mutex` + `std::condition_variable` + work queue), **~10× speedup**, benchmarked against each
+  other and verified pixel-identical ([Performance](#performance))
+- **Verify the scaling anomaly** - measure whether L3 sharing or SMT thread placement explains the
+  1 → 2 thread efficiency drop (thread affinity experiment)
 - **Next-event estimation** - sample the light directly for much less noise
 - **Golden-image regression tests + CI** - verify renders don't drift
 
