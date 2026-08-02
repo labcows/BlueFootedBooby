@@ -1,7 +1,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 
-#include "stb_image.h"
-#include "stb_image_write.h"
+#include <stb_image.h>
+#include <stb_image_write.h>
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <vector>
@@ -33,7 +33,7 @@ namespace
 			for (int c = 0; c < 3; c++)
 			{
 				const float v = math::clamp(pixels[i][c], 0.0f, 1.0f);
-				rgb[i * 3 + c] = static_cast<unsigned char>(v * 255.0f + 0.5f);
+				rgb[i * kChannels + c] = static_cast<unsigned char>(v * 255.0f + 0.5f);
 			}
 		}
 		return rgb;
@@ -47,19 +47,23 @@ namespace
 		return diff;
 	}
 
-	void RenderAndSave()
-	{
-		std::filesystem::create_directories(kGoldenDir);
+}
 
-		const std::vector<unsigned char> rgb = renderToBytes();
-		const std::filesystem::path out = kGoldenDir / "cornell_actual.png";
+// Writes the current render to cornell_actual.png. It never touches the golden
+// file: promoting a render to the reference is a manual copy, on purpose, so a
+// broken render cannot silently become the thing every later run is judged against.
+TEST(GoldenImage, RenderToActualImage)
+{
+	std::filesystem::create_directories(kGoldenDir);
 
-		const int ok = stbi_write_png(out.string().c_str(), kWidth, kHeight, kChannels,
-			rgb.data(), kWidth * kChannels);
+	const std::vector<unsigned char> rgb = renderToBytes();
+	const std::filesystem::path out = kGoldenDir / "cornell_actual.png";
 
-		EXPECT_NE(ok, 0) << "failed to write " << out.string();
-		std::cout << "wrote " << std::filesystem::absolute(out).string() << std::endl;
-	}
+	const int ok = stbi_write_png(out.string().c_str(), kWidth, kHeight, kChannels,
+	                              rgb.data(), kWidth * kChannels);
+
+	EXPECT_NE(ok, 0) << "failed to write " << out.string();
+	std::cout << "wrote " << std::filesystem::absolute(out).string() << std::endl;
 }
 
 TEST(GoldenImage, CompareImageWithGolden)
@@ -79,22 +83,9 @@ TEST(GoldenImage, CompareImageWithGolden)
 
 	ASSERT_EQ(w, kWidth);
 	ASSERT_EQ(h, kHeight);
-	ASSERT_EQ(w * h * 3, static_cast<int>(rgb.size()));
+	ASSERT_EQ(w * h * kChannels, static_cast<int>(rgb.size()));
 
-	int diff = 0;
-
-	for (int i = 0; i < h; i++)
-		for (int j = 0; j < w; j++)
-		{
-			for (int k = 0; k < 3; k++)
-			{
-				int idx = (i * w + j) * kChannels + k;
-				if (data[idx] != rgb[idx])
-					diff++;
-			}
-		}
-
-	EXPECT_EQ(diff, 0);
+	EXPECT_EQ(countDifferingBytes(data.get(), rgb.data(), rgb.size()), 0);
 }
 
 TEST(GoldenImage, DetectsCorruptedPixels)
