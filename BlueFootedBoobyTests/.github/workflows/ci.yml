@@ -1,0 +1,13 @@
+name: Booby-CI
+
+on:
+  push:
+    branches: [master]
+   
+jobs:
+    print-hello:
+      runs-on: windows-latest
+
+      steps:
+        - uses: actions/checkout@v4
+        - run: echo "HelloCows"
