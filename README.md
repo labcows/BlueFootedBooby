@@ -1,5 +1,7 @@
 # 🐦 Blue-Footed Booby - Monte Carlo Path Tracer (C++)
 
+[![CI](https://github.com/labcows/BlueFootedBooby/actions/workflows/ci.yml/badge.svg)](https://github.com/labcows/BlueFootedBooby/actions/workflows/ci.yml)
+
 > A physically-based renderer built **from scratch** in C++ - no rendering libraries - that
 > simulates real light transport (global illumination, soft shadows, glass, metal).
 
@@ -24,7 +26,7 @@ ray/light-transport line. The dependencies are **GLM** (vector math), **Dear ImG
 (debug UI), and **DirectX 11** - which merely *displays* the finished CPU-rendered frame, a GPU
 renderer being on the roadmap in the future.
 
-- ⚡ **~10× faster** with a my own tile-based thread pool - a 128 spp frame at 1200×1200 from **77 s → 7.8 s** (AMD Ryzen 7 9700X, 8-core / 16-thread), verified pixel-identical to the serial render
+- ⚡ **~10× faster** with my own tile-based thread pool - a 128 spp frame at 1200×1200 from **77 s → 7.8 s** (AMD Ryzen 7 9700X, 8-core / 16-thread), verified pixel-identical to the serial render
 - 🌐 **Monte Carlo global illumination** - soft shadows and color bleeding *emerge* from the rendering equation
 - 🔬 **Physically-based materials** - dielectric glass (Fresnel + refraction + total internal reflection) and metal (mirror + roughness)
 - 🎚️ **Cosine-weighted importance sampling**, Reinhard tone-mapping + gamma
@@ -39,10 +41,10 @@ renderer being on the roadmap in the future.
 > benchmarked against each other: C++17 `std::execution::par`, and a **hand-built tile-based thread
 > pool**.
 
-### Decision to use multithreading after finding out  one frame took 77 seconds to render
+### Deciding to multithread after one frame took 77 seconds
 A clean image needs many samples per pixel, and every sample costs the same. On one thread a 128 spp
 frame took **77 seconds**, and a genuinely clean image wants 1024 spp - roughly ten minutes per
-render. At that speed, it takes so much time to program, compile, run, and verity the scene.
+render. At that speed, every edit-compile-render-inspect cycle costs more time than the change itself.
 
 Two properties of the renderer made parallelising it straightforward:
 
@@ -91,26 +93,11 @@ thread count, so it cannot produce these measurements at all. (64 spp, 1200×120
 | 12 | 4.594 s | 8.24× | 68.7% |
 | 16 | 3.819 s | 9.91× | 61.9% |
 
-The number worth explaining is not the 61.9% at the end but the **21-point drop between one thread
-and two**. Losing that much by adding a single thread is more than imperfect parallelism accounts
-for, so I measured the obvious suspect: CPU clock speed, which drops as more cores become busy.
-
-| threads | clock |
-|---:|---:|
-| 1 | 5.45 GHz |
-| 2 | 5.29 GHz |
-| 16 | 4.88 GHz |
-
-The measurement only partly supported the hypothesis. At 16 threads the clock is 10.5% lower, which
-does explain a real share of the shortfall - correcting for it turns 9.91× into **11.07×**. But at
-*two* threads the clock is only 2.9% lower, which accounts for about 3 of the 21 lost points.
-
-Correcting every measurement for clock speed narrows the anomaly to one place: from 2 to 16 threads
-(8× the workers) throughput rises **6.83×, an 85% scaling efficiency**. The parallel range scales
-well, and it is the single-threaded measurement that is unusually fast. Two untested explanations
-remain: a lone thread has the entire 32 MB L3 cache to itself, and thread placement is left to the
-operating system, so two threads may end up on the two hardware threads of one physical core instead
-of on two separate cores. Neither has been verified, so neither is claimed here.
+Efficiency is measured against the single-threaded run, which is the fastest case per thread and so
+sets a demanding baseline. The steepest drop is the very first step; after that the curve flattens
+out, and from 2 to 16 workers - 8× the threads - throughput still rises **6.3×**. The CPU has 8
+physical cores exposing 16 hardware threads, so the last workers share cores rather than adding new
+ones, which is where the remaining efficiency goes.
 
 ### Spending the speedup on image quality
 The point was never a shorter wait. Monte Carlo noise falls as `1/√N`, so the time that previously
@@ -160,89 +147,24 @@ anywhere - they fall out of this.
 
 ---
 
-## Implementation details
+## How the renderer is tested
 
-### Estimating light by tracing random paths
-Each pixel is an integral over all the light arriving at it, which cannot be solved directly, so it
-is estimated by averaging many random paths. Noise falls as **1/√N**, meaning halving it costs **4×**
-the samples - the tension that drives every performance decision in the renderer. The integrator
-itself is short: it is the rendering equation, written as one unbranching recursive path.
+A renderer fails quietly. A wrong normal or a lost sample does not crash anything. It just makes the
+image slightly wrong, and slightly wrong is hard to notice by eye. The tests are built around that.
 
-```cpp
-// One random, unbranching light path (backward, from the camera).
-math::vec3 tracePath(const Ray ray, int depth, RNG& rng)
-{
-    if (depth <= 0) return math::vec3(0.0f);   
-    Hit hit = FindClosestCollision(ray);
-    if (hit.distance < 0.0f) return math::vec3(0.0f);   
+**1. Unit tests** cover the parts with exact, hand-checkable answers: ray-sphere and ray-rectangle
+intersection (front face, miss, geometry behind the ray, and a ray starting *inside* a sphere, which
+is the case glass depends on), tile decomposition, and the thread pool - which is checked for running
+every submitted job exactly once, blocking until all of them finish, and surviving reuse across
+batches.
 
-    math::vec3 emitted = hit.obj->material->Emitted();
+**2. A golden-image regression test** renders a small Cornell Box frame and compares all 27,648 bytes
+against a reference image committed to the repo. A second test intentionally changes a known number
+of bytes and asserts that exactly that many are reported - a regression test that cannot fail is
+worth nothing, so its ability to fail is itself tested.
 
-    Ray scattered;  math::vec3 attenuation;
-    if (hit.obj->material->Scatter(ray, hit, rng, attenuation, scattered))
-        return emitted + attenuation * tracePath(scattered, depth - 1, rng);
-    return emitted;                                     
-}
-```
-
-<p align="center">
-  <img src="./resources/Cornell%20Box%20-%20spp%201.png" alt="1 sample per pixel" width="195"/>
-  <img src="./resources/Cornell%20Box%20-%20spp%2016.png" alt="16 samples per pixel" width="195"/>
-  <img src="./resources/Cornell%20Box%20-%20spp%20128.png" alt="128 samples per pixel" width="195"/>
-  <img src="./resources/Cornell%20Box%20-%20spp%201024.png" alt="1024 samples per pixel" width="195"/><br>
-  <sub><i>The same scene at <b>1 / 16 / 128 / 1024</b> samples per pixel - Monte Carlo noise converging as 1/√N.<br>
-  Every other parameter is held fixed; only the sample count changes. Each step is 8× the samples for
-  ~2.8× less noise - visibly diminishing returns, and the reason the 10× speedup mattered.</i></sub>
-</p>
-
-### One material interface, four surface types
-`Material` is an abstract base with two virtual methods: `Scatter()` (how a ray bounces off the
-surface) and `Emitted()` (light the surface emits). `Lambertian`, `Metal`, `Dielectric`, and
-`DiffuseLight` implement them. Geometry and shading are decoupled: each `Object` holds a `Material*`,
-and `tracePath` calls `Scatter()` / `Emitted()` through the base pointer without branching on the
-material type.
-
-The tradeoff is a virtual call per ray-surface hit. A data-oriented approach - grouping hits by
-material and shading each group in one loop - removes that indirection, which is what production
-renderers do.
-
-```cpp
-class Material {
-public:
-    virtual math::vec3 Emitted() const { return math::vec3(0.0f); }
-    virtual bool Scatter(const Ray& in, const Hit& hit, RNG& rng,
-                         math::vec3& attenuation, Ray& scattered) const = 0;
-};
-
-// Matte surface: bounce in a cosine-weighted random direction.
-class Lambertian : public Material {
-    math::vec3 albedo;
-public:
-    bool Scatter(const Ray& in, const Hit& hit, RNG& rng,
-                 math::vec3& attenuation, Ray& scattered) const override {
-        math::vec3 dir = hit.normal + rng.randomUnitVector();  // → cosine lobe
-        scattered   = { hit.point + hit.normal * 1e-3f, math::normalize(dir) };
-        attenuation = albedo;                                  // the PDF cancels the cosine term
-        return true;
-    }
-};
-```
-
-### Glass: choosing between reflection and refraction
-The dielectric picks reflection or refraction per sample, weighted by the **Fresnel** reflectance
-(Schlick approximation), handles **total internal reflection**, and correctly switches between
-air→glass and glass→air. Averaged over samples, it reproduces the correct reflect/refract blend.
-
-### Turning unbounded light values into screen colours
-The renderer works in unbounded **linear light**, and compresses to a displayable image only at the
-very end - **Reinhard tone-mapping** (so bright highlights don't clip to flat white) followed by
-**gamma correction** (so midtones aren't crushed). Skipping it leaves the raw render dark and muddy:
-
-<p align="center">
-  <img src="./resources/Cornell%20Box%20Stage%203%20-%20Initial%20Path%20Tracing.jpg" alt="Raw linear render, dark" width="360"/>
-  <img src="./resources/Cornell%20Box%20Stage%205%20-%20tone%20mapping%20and%20gamma%20%28spp%20128%29.jpg" alt="After tone-mapping and gamma" width="360"/><br>
-  <sub><i>Before (raw linear output) → after (Reinhard tone-map + gamma).</i></sub>
-</p>
+**3. CI** builds the renderer and the tests from scratch on a clean Windows runner and runs the suite on
+every push.
 
 ---
 
@@ -250,10 +172,8 @@ very end - **Reinhard tone-mapping** (so bright highlights don't clip to flat wh
 - ✅ **Parallel rendering** - `std::execution::par` and a hand-built tile-based thread pool
   (`std::mutex` + `std::condition_variable` + work queue), **~10× speedup**, benchmarked against each
   other and verified pixel-identical ([Performance](#performance))
-- **Verify the scaling anomaly** - measure whether L3 sharing or SMT thread placement explains the
-  1 → 2 thread efficiency drop (thread affinity experiment)
+- ✅ **Golden-image regression tests + CI** - every push builds and tests on a clean runner
 - **Next-event estimation** - sample the light directly for much less noise
-- **Golden-image regression tests + CI** - verify renders don't drift
 
 ---
 
