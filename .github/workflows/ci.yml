@@ -11,4 +11,7 @@ jobs:
       steps:
         - uses: actions/checkout@v4
         - run: echo "HelloCows"
-        - run: dir
+        - run: microsoft/setup-msbuild@v2
+        - run: vcpkg integrate install
+        - run: msbuild BlueFootedBooby.vcxproj -p:Configuration=Release -p:Platform=x64
+  
