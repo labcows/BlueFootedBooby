@@ -5,7 +5,7 @@ on:
     branches: [master]
    
 jobs:
-  print-hello:
+  build-release:
     runs-on: windows-latest
 
     steps:
@@ -14,4 +14,8 @@ jobs:
       - uses: microsoft/setup-msbuild@v2
       - run: vcpkg integrate install
       - run: msbuild BlueFootedBooby.vcxproj -p:Configuration=Release -p:Platform=x64
-  
+      - run: msbuild BlueFootedBoobyTests\BlueFootedBoobyTests.vcxproj -p:Configuration=Release -p:Platform=x64
+       
+      - name: Run Tests
+        working-directory: BlueFootedBoobyTests
+        run: ..\x64\Release\BlueFootedBoobyTests.exe
