@@ -19,3 +19,10 @@ jobs:
       - name: Run Tests
         working-directory: BlueFootedBoobyTests
         run: ..\x64\Release\BlueFootedBoobyTests.exe
+
+      - name: Upload Artifact if failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-images
+          path: BlueFootedBoobyTests/golden
