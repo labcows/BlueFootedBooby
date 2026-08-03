@@ -35,6 +35,12 @@
   <PropertyGroup Label="Vcpkg">
     <VcpkgEnableManifest>true</VcpkgEnableManifest>
   </PropertyGroup>
+  <PropertyGroup>
+    <!-- Anchored to the project directory rather than $(SolutionDir), so building the
+         .vcxproj directly (as CI does) drops the exe in the same place a Visual Studio
+         solution build does. -->
+    <OutDir>$(MSBuildProjectDirectory)\..\x64\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <!-- Applies to every configuration, so Debug and Release cannot drift apart.
