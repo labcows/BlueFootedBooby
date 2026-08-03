@@ -37,8 +37,10 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <!-- Applies to every configuration, so Debug and Release cannot drift apart. -->
-      <AdditionalIncludeDirectories>$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- Applies to every configuration, so Debug and Release cannot drift apart.
+           Anchored to the project directory, not $(SolutionDir), so the project also
+           builds when msbuild is pointed straight at the .vcxproj (as CI does). -->
+      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -98,9 +100,6 @@
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
