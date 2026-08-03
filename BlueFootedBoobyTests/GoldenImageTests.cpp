@@ -16,7 +16,7 @@ namespace
 {
 	constexpr int kWidth  = 96;
 	constexpr int kHeight = 96;
-	constexpr int kSpp    = 16;
+	constexpr int kSpp    = 17;
 	constexpr int kDepth  = 8;
 	constexpr int kChannels = 3;
 
