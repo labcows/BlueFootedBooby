@@ -5,13 +5,13 @@ on:
     branches: [master]
    
 jobs:
-    print-hello:
-      runs-on: windows-latest
+  print-hello:
+    runs-on: windows-latest
 
-      steps:
-        - uses: actions/checkout@v4
-        - run: echo "HelloCows"
-        - run: microsoft/setup-msbuild@v2
-        - run: vcpkg integrate install
-        - run: msbuild BlueFootedBooby.vcxproj -p:Configuration=Release -p:Platform=x64
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "HelloCows"
+      - uses: microsoft/setup-msbuild@v2
+      - run: vcpkg integrate install
+      - run: msbuild BlueFootedBooby.vcxproj -p:Configuration=Release -p:Platform=x64
   
