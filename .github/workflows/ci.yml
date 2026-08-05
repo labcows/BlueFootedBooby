@@ -5,24 +5,28 @@ on:
     branches: [master]
    
 jobs:
-  build-release:
+  build-and-test:
     runs-on: windows-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
     steps:
       - uses: actions/checkout@v4
       - run: echo "HelloCows"
       - uses: microsoft/setup-msbuild@v2
       - run: vcpkg integrate install
-      - run: msbuild BlueFootedBooby.vcxproj -p:Configuration=Release -p:Platform=x64
-      - run: msbuild BlueFootedBoobyTests\BlueFootedBoobyTests.vcxproj -p:Configuration=Release -p:Platform=x64
-       
+      
+      - run: msbuild BlueFootedBooby.vcxproj -p:Configuration=${{ matrix.configuration }} -p:Platform=x64
+      - run: msbuild BlueFootedBoobyTests\BlueFootedBoobyTests.vcxproj -p:Configuration=${{ matrix.configuration }} -p:Platform=x64
+      
       - name: Run Tests
         working-directory: BlueFootedBoobyTests
-        run: ..\x64\Release\BlueFootedBoobyTests.exe
+        run: ..\x64\${{ matrix.configuration }}\BlueFootedBoobyTests.exe
 
       - name: Upload Artifact if failed
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: golden-images
+          name: golden-images-${{ matrix.configuration }}
           path: BlueFootedBoobyTests/golden
