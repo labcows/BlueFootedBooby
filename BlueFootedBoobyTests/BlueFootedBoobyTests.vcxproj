@@ -118,9 +118,6 @@
     <ClCompile Include="..\src\Texture.cpp" />
     <ClCompile Include="GeometryTests.cpp" />
     <ClCompile Include="GoldenImageTests.cpp" />
-    <ClCompile Include="MaterialTests.cpp" />
-    <ClCompile Include="RNGTests.cpp" />
-    <ClCompile Include="test.cpp" />
     <ClCompile Include="TestMain.cpp" />
     <ClCompile Include="ThreadPoolTests.cpp" />
     <ClCompile Include="TileTests.cpp" />
